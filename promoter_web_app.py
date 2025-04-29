@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
+import re
 from tensorflow.keras.models import load_model
 
 # === PAGE CONFIG ===
@@ -19,15 +20,19 @@ def one_hot_encode(seq):
                'C': [0, 0, 0, 1]}
     return [mapping.get(base.upper(), [0, 0, 0, 0]) for base in seq]
 
-# === Predict Promoters ===
-def predict_sequence(seq):
+# === Check σ⁵⁴ Motif: TGGCAC-N₇-TTGCW
+def is_sigma54_motif(seq):
+    pattern = r'TGGCAC.{7}TTGC[AT]'
+    return bool(re.search(pattern, seq))
+
+# === Predict Promoters with Motif Filtering ===
+def predict_sequence(seq, threshold=0.8):
     results = []
-    for i in range(len(seq) - 80):  # sliding window of 81 bp
+    for i in range(len(seq) - 80):  # 81-mer window
         window = seq[i:i+81]
         encoded = np.array(one_hot_encode(window)).reshape(1, 81, 4)
         prob = model.predict(encoded, verbose=0)[0][0]
-        label = 1 if prob > 0.8 else 0
-        if label == 1:
+        if prob > threshold and is_sigma54_motif(window):
             is_known = window in promoter_df["PromoterSequence"].values
             function = "Known promoter" if is_known else "Unknown promoter"
             results.append((window, prob, function, i))
@@ -49,8 +54,7 @@ st.markdown("""
     <h4 style='color:#0b5394;'>📘 About This Tool</h4>
     <p style='color:#333; font-size:16px; line-height:1.6;'>
     This web app uses a trained deep learning model to detect <b>σ⁵⁴-dependent bacterial promoters</b> in DNA sequences.
-    It scans each input using a sliding window of 81 base pairs and checks for promoter-like patterns.
-    The app also cross-checks with a known promoter database to identify matches.
+    It only reports predictions that contain the <code>TGGCAC-N₇-TTGCW</code> consensus motif, specific to σ⁵⁴ promoters.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -69,7 +73,7 @@ if st.button("🔍 Predict"):
             st.error(f"❌ Sequence {idx} contains invalid characters. Skipping.")
             continue
 
-        results = predict_sequence(seq)
+        results = predict_sequence(seq, threshold=0.8)
 
         if results:
             st.markdown(f"<h4 style='color: #2e7d32;'>🔍 Results for Sequence {idx}</h4>", unsafe_allow_html=True)
