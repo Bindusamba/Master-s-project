@@ -8,7 +8,7 @@ st.set_page_config(page_title="σ⁵⁴ Promoter Predictor", page_icon="🧬", l
 
 # === Load Model & Promoter Database ===
 model = load_model("cnn_model.h5")
-promoter_df = pd.read_csv("Promoter.csv")
+promoter_df = pd.read_csv("promoter.csv")
 promoter_df["PromoterSequence"] = promoter_df["PromoterSequence"].astype(str).str.upper()
 
 # === One-hot Encode DNA ===
