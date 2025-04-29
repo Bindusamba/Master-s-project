@@ -75,12 +75,6 @@ if st.button("🔍 Predict"):
             st.markdown(f"<h4 style='color: #2e7d32;'>🔍 Results for Sequence {idx}</h4>", unsafe_allow_html=True)
             for sub_seq, prob, function, start_idx in results:
                 end_idx = start_idx + 81
-                highlighted_seq = (
-                    seq[:start_idx]
-                    + f"<mark style='background-color: #a5d6a7; font-weight: bold;'>{seq[start_idx:end_idx]}</mark>"
-                    + seq[end_idx:]
-                )
-
                 st.markdown(f"""
                     <div style="background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 6px solid #66bb6a;">
                         ✅ <strong>σ⁵⁴ Promoter found</strong><br>
@@ -88,8 +82,10 @@ if st.button("🔍 Predict"):
                         <b>Position:</b> {start_idx}–{end_idx}<br>
                         <b>Matched 81-mer:</b> <code>{sub_seq}</code><br>
                         <b>Database Match:</b> {function}<br>
-                        <b>Sequence with Highlight:</b><br>
-                        <code style="word-wrap: break-word;">{highlighted_seq}</code>
+                        <b>Sequence with Promoter Highlighted:</b><br>
+                        <div style="font-family: monospace; word-wrap: break-word; background-color: #f9fbe7; padding: 10px; border-radius: 5px;">
+                        {seq[:start_idx]}<mark style="background-color: #a5d6a7; font-weight: bold;">{seq[start_idx:end_idx]}</mark>{seq[end_idx:]}
+                        </div>
                     </div>
                 """, unsafe_allow_html=True)
         else:
@@ -98,4 +94,3 @@ if st.button("🔍 Predict"):
                     ⚠️ <strong>No σ⁵⁴ Promoter detected</strong> in Sequence {idx}.
                 </div>
             """, unsafe_allow_html=True)
-
