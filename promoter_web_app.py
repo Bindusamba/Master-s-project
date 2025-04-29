@@ -1,119 +1,75 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import re
 from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-# === PAGE CONFIG ===
-st.set_page_config(page_title="σ⁵⁴ Promoter Predictor", page_icon="🧬", layout="centered")
-
-# === Load Model & Promoter Database ===
+# Load your trained CNN model
 model = load_model("cnn_model.h5")
-promoter_df = pd.read_csv("promoter.csv")
-promoter_df["PromoterSequence"] = promoter_df["PromoterSequence"].astype(str).str.upper()
 
-# === One-hot Encode DNA ===
-def one_hot_encode(seq):
-    mapping = {'A': [1, 0, 0, 0],
-               'T': [0, 1, 0, 0],
-               'G': [0, 0, 1, 0],
-               'C': [0, 0, 0, 1]}
-    return [mapping.get(base.upper(), [0, 0, 0, 0]) for base in seq]
+# One-hot encoding map
+base_map = {'A': [1, 0, 0, 0],
+            'C': [0, 1, 0, 0],
+            'G': [0, 0, 1, 0],
+            'T': [0, 0, 0, 1],
+            'N': [0, 0, 0, 0]}
 
-# === Fuzzy σ⁵⁴ Motif Checker ===
-def is_sigma54_motif(seq):
-    """
-    Check for σ⁵⁴ promoter-like patterns allowing small deviations.
-    Looks for TGGCxx near -24 and TTGCx near -12 with ~7 bp spacing.
-    """
-    for i in range(10, 20):  # sliding between positions
-        part1 = seq[i:i+6]         # potential -24 box
-        spacer = seq[i+6:i+13]     # 7 bp spacer
-        part2 = seq[i+13:i+18]     # potential -12 box
+def one_hot_encode(sequence, max_len=81):
+    sequence = sequence.upper()
+    sequence = ''.join([base if base in base_map else 'N' for base in sequence])
+    if len(sequence) < max_len:
+        sequence = sequence + 'N' * (max_len - len(sequence))  # pad
+    else:
+        sequence = sequence[:max_len]  # truncate
+    encoded = [base_map[base] for base in sequence]
+    return np.array(encoded)
 
-        if len(part1) < 6 or len(part2) < 5:
-            continue
+def predict_promoter(seq):
+    encoded = one_hot_encode(seq)
+    X = np.expand_dims(encoded, axis=0)
+    y_pred = model.predict(X)[0][0]
+    return y_pred
 
-        mismatch1 = sum([a != b for a, b in zip(part1, 'TGGCAC')])
-        mismatch2 = sum([a != b for a, b in zip(part2[:5], 'TTGCA')])
+def highlight_promoter(sequence):
+    # Highlight TTGGCACG as sample sigma54 motif (example; adjust to your model's learned features)
+    motif = "TTGGCACG"
+    seq = sequence.upper()
+    if motif in seq:
+        start = seq.find(motif)
+        end = start + len(motif)
+        highlighted = seq[:start] + f"<span style='background-color: #FFD700; color: black'>{seq[start:end]}</span>" + seq[end:]
+        return highlighted
+    else:
+        return seq
 
-        if mismatch1 <= 1 and mismatch2 <= 1:
-            return True
-    return False
+# Streamlit UI
+st.title("σ54 Promoter Detection Web App")
+st.write("Paste one or more DNA sequences (one per line):")
 
-# === Predict Promoters in Any Length Sequence ===
-def predict_sequence(seq, threshold=0.8):
-    results = []
-    for i in range(len(seq) - 80):  # sliding window of 81 bp
-        window = seq[i:i+81]
-        encoded = np.array(one_hot_encode(window)).reshape(1, 81, 4)
-        prob = model.predict(encoded, verbose=0)[0][0]
+user_input = st.text_area("DNA Sequences", height=300, placeholder="ATGCTACGT...")
 
-        if prob > threshold and is_sigma54_motif(window):
-            is_known = window in promoter_df["PromoterSequence"].values
-            function = "Known promoter" if is_known else "Unknown promoter"
-            results.append((window, prob, function, i))
-    return results
+if st.button("Predict σ54 Promoter"):
+    if not user_input.strip():
+        st.warning("Please enter at least one DNA sequence.")
+    else:
+        sequences = user_input.strip().split("\n")
+        results = []
+        for i, seq in enumerate(sequences):
+            if not seq.strip():
+                continue
+            pred = predict_promoter(seq)
+            label = "Promoter" if pred > 0.5 else "Non-Promoter"
+            color_seq = highlight_promoter(seq)
+            results.append({
+                "Sequence #": i + 1,
+                "Prediction": label,
+                "Probability": round(pred, 4),
+                "Highlighted Sequence": color_seq
+            })
 
-# === UI HEADER ===
-st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🧬 σ⁵⁴ Promoter Multi-Sequence Predictor</h1>", unsafe_allow_html=True)
-
-# === About Section ===
-st.markdown("""
-<div style='
-    background-color: #f0f9ff;
-    border-left: 6px solid #2196f3;
-    padding: 15px;
-    border-radius: 10px;
-    margin-bottom: 25px;
-    font-family: "Helvetica", sans-serif;
-'>
-    <h4 style='color:#0b5394;'>📘 About This Tool</h4>
-    <p style='color:#333; font-size:16px; line-height:1.6;'>
-    This web app detects <b>σ⁵⁴-dependent bacterial promoters</b> in any DNA sequence. It uses a deep learning model trained on 81 bp windows and filters results using the known motif <code>TGGCAC-N₇-TTGCW</code> (with tolerance for minor mismatches).
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("---")
-
-# === Text Input ===
-user_input = st.text_area("🧬 Enter DNA sequences (one per line, any length):", height=200)
-
-# === Predict Button ===
-if st.button("🔍 Predict"):
-    sequences = [seq.strip().upper() for seq in user_input.strip().split('\n') if seq.strip()]
-    
-    for idx, seq in enumerate(sequences, 1):
-        if any(c not in "ATGC" for c in seq):
-            st.error(f"❌ Sequence {idx} contains invalid characters. Skipping.")
-            continue
-        elif len(seq) < 81:
-            st.warning(f"⚠️ Sequence {idx} is shorter than 81 bp. Skipping.")
-            continue
-
-        results = predict_sequence(seq, threshold=0.8)
-
-        if results:
-            st.markdown(f"<h4 style='color: #2e7d32;'>🔍 Results for Sequence {idx}</h4>", unsafe_allow_html=True)
-            for sub_seq, prob, function, start_idx in results:
-                end_idx = start_idx + 81
-                st.markdown(f"""
-                    <div style="background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 6px solid #66bb6a;">
-                        ✅ <strong>σ⁵⁴ Promoter found</strong><br>
-                        <b>Confidence:</b> {prob:.2f}<br>
-                        <b>Position:</b> {start_idx}–{end_idx}<br>
-                        <b>Matched 81-mer:</b> <code>{sub_seq}</code><br>
-                        <b>Database Match:</b> {function}<br>
-                        <b>Sequence with Promoter Highlighted:</b><br>
-                        <div style="font-family: monospace; word-wrap: break-word; background-color: #f9fbe7; padding: 10px; border-radius: 5px;">
-                        {seq[:start_idx]}<mark style="background-color: #a5d6a7; font-weight: bold;">{seq[start_idx:end_idx]}</mark>{seq[end_idx:]}
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-                <div style="background-color: #fff8e1; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 6px solid #fbc02d;">
-                    ⚠️ <strong>No σ⁵⁴ Promoter detected</strong> in Sequence {idx}.
-                </div>
-            """, unsafe_allow_html=True)
+        df = pd.DataFrame(results)
+        for idx, row in df.iterrows():
+            st.markdown(f"### Sequence {row['Sequence #']}")
+            st.markdown(f"**Prediction**: {row['Prediction']} ({row['Probability']})")
+            st.markdown("**Highlighted:**", unsafe_allow_html=True)
+            st.markdown(f"<code>{row['Highlighted Sequence']}</code>", unsafe_allow_html=True)
