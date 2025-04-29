@@ -77,7 +77,7 @@ if st.button("🔍 Predict"):
                 end_idx = start_idx + 81
                 highlighted_seq = (
                     seq[:start_idx]
-                    + f"<mark style='background-color: #a5d6a7; font-weight: bold;'>{sub_seq}</mark>"
+                    + f"<mark style='background-color: #a5d6a7; font-weight: bold;'>{seq[start_idx:end_idx]}</mark>"
                     + seq[end_idx:]
                 )
 
@@ -88,7 +88,8 @@ if st.button("🔍 Predict"):
                         <b>Position:</b> {start_idx}–{end_idx}<br>
                         <b>Matched 81-mer:</b> <code>{sub_seq}</code><br>
                         <b>Database Match:</b> {function}<br>
-                        <b>Sequence with Highlight:</b><br> <code style="word-wrap: break-word;">{highlighted_seq}</code>
+                        <b>Sequence with Highlight:</b><br>
+                        <code style="word-wrap: break-word;">{highlighted_seq}</code>
                     </div>
                 """, unsafe_allow_html=True)
         else:
@@ -97,3 +98,4 @@ if st.button("🔍 Predict"):
                     ⚠️ <strong>No σ⁵⁴ Promoter detected</strong> in Sequence {idx}.
                 </div>
             """, unsafe_allow_html=True)
+
