@@ -26,7 +26,7 @@ def predict_sequence(seq):
         window = seq[i:i+81]
         encoded = np.array(one_hot_encode(window)).reshape(1, 81, 4)
         prob = model.predict(encoded, verbose=0)[0][0]
-        label = 1 if prob > 0.5 else 0
+        label = 1 if prob > 0.8 else 0
         if label == 1:
             is_known = window in promoter_df["PromoterSequence"].values
             function = "Known promoter" if is_known else "Unknown promoter"
