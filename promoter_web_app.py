@@ -30,7 +30,7 @@ def predict_sequence(seq):
         if label == 1:
             is_known = window in promoter_df["PromoterSequence"].values
             function = "Known promoter" if is_known else "Unknown promoter"
-            results.append((window, prob, function))
+            results.append((window, prob, function, i))
     return results
 
 # === UI HEADER ===
@@ -73,13 +73,22 @@ if st.button("🔍 Predict"):
 
         if results:
             st.markdown(f"<h4 style='color: #2e7d32;'>🔍 Results for Sequence {idx}</h4>", unsafe_allow_html=True)
-            for sub_seq, prob, function in results:
+            for sub_seq, prob, function, start_idx in results:
+                end_idx = start_idx + 81
+                highlighted_seq = (
+                    seq[:start_idx]
+                    + f"<mark style='background-color: #a5d6a7; font-weight: bold;'>{sub_seq}</mark>"
+                    + seq[end_idx:]
+                )
+
                 st.markdown(f"""
                     <div style="background-color: #e8f5e9; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 6px solid #66bb6a;">
                         ✅ <strong>σ⁵⁴ Promoter found</strong><br>
                         <b>Confidence:</b> {prob:.2f}<br>
-                        <b>81-mer:</b> <code>{sub_seq}</code><br>
-                        <b>Database Match:</b> {function}
+                        <b>Position:</b> {start_idx}–{end_idx}<br>
+                        <b>Matched 81-mer:</b> <code>{sub_seq}</code><br>
+                        <b>Database Match:</b> {function}<br>
+                        <b>Sequence with Highlight:</b><br> <code style="word-wrap: break-word;">{highlighted_seq}</code>
                     </div>
                 """, unsafe_allow_html=True)
         else:
