@@ -20,18 +20,35 @@ def one_hot_encode(seq):
                'C': [0, 0, 0, 1]}
     return [mapping.get(base.upper(), [0, 0, 0, 0]) for base in seq]
 
-# === Check σ⁵⁴ Motif: TGGCAC-N₇-TTGCW
+# === Fuzzy σ⁵⁴ Motif Checker ===
 def is_sigma54_motif(seq):
-    pattern = r'TGGCAC.{7}TTGC[AT]'
-    return bool(re.search(pattern, seq))
+    """
+    Check for σ⁵⁴ promoter-like patterns allowing small deviations.
+    Looks for TGGCxx near -24 and TTGCx near -12 with ~7 bp spacing.
+    """
+    for i in range(10, 20):  # sliding between positions
+        part1 = seq[i:i+6]         # potential -24 box
+        spacer = seq[i+6:i+13]     # 7 bp spacer
+        part2 = seq[i+13:i+18]     # potential -12 box
 
-# === Predict Promoters with Motif Filtering ===
+        if len(part1) < 6 or len(part2) < 5:
+            continue
+
+        mismatch1 = sum([a != b for a, b in zip(part1, 'TGGCAC')])
+        mismatch2 = sum([a != b for a, b in zip(part2[:5], 'TTGCA')])
+
+        if mismatch1 <= 1 and mismatch2 <= 1:
+            return True
+    return False
+
+# === Predict Promoters in Any Length Sequence ===
 def predict_sequence(seq, threshold=0.8):
     results = []
-    for i in range(len(seq) - 80):  # 81-mer window
+    for i in range(len(seq) - 80):  # sliding window of 81 bp
         window = seq[i:i+81]
         encoded = np.array(one_hot_encode(window)).reshape(1, 81, 4)
         prob = model.predict(encoded, verbose=0)[0][0]
+
         if prob > threshold and is_sigma54_motif(window):
             is_known = window in promoter_df["PromoterSequence"].values
             function = "Known promoter" if is_known else "Unknown promoter"
@@ -53,8 +70,7 @@ st.markdown("""
 '>
     <h4 style='color:#0b5394;'>📘 About This Tool</h4>
     <p style='color:#333; font-size:16px; line-height:1.6;'>
-    This web app uses a trained deep learning model to detect <b>σ⁵⁴-dependent bacterial promoters</b> in DNA sequences.
-    It only reports predictions that contain the <code>TGGCAC-N₇-TTGCW</code> consensus motif, specific to σ⁵⁴ promoters.
+    This web app detects <b>σ⁵⁴-dependent bacterial promoters</b> in any DNA sequence. It uses a deep learning model trained on 81 bp windows and filters results using the known motif <code>TGGCAC-N₇-TTGCW</code> (with tolerance for minor mismatches).
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -62,7 +78,7 @@ st.markdown("""
 st.markdown("---")
 
 # === Text Input ===
-user_input = st.text_area("🧬 Enter DNA sequences (one per line):", height=200)
+user_input = st.text_area("🧬 Enter DNA sequences (one per line, any length):", height=200)
 
 # === Predict Button ===
 if st.button("🔍 Predict"):
@@ -71,6 +87,9 @@ if st.button("🔍 Predict"):
     for idx, seq in enumerate(sequences, 1):
         if any(c not in "ATGC" for c in seq):
             st.error(f"❌ Sequence {idx} contains invalid characters. Skipping.")
+            continue
+        elif len(seq) < 81:
+            st.warning(f"⚠️ Sequence {idx} is shorter than 81 bp. Skipping.")
             continue
 
         results = predict_sequence(seq, threshold=0.8)
